@@ -1,0 +1,15 @@
+NODE MANAGER HELP FILE
+
+NOTE: <IPC format> <- ip port cmd <- cmd being relative to the prefixing cmd ex. cmd ip:port cmd
+
+'PING' - pings server if server is responsive sends back "PONG"
+
+'start <ipc format>' <- used to start a pre installed node program such as NFT
+
+'kill <ipc format>' <- used to kill a pre installed node program such as NFT 
+
+'DOJOB <ipc format>' <- create a system() job
+
+'restart' <- restart node
+
+<EOF>
