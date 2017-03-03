@@ -100,7 +100,6 @@ int service(int conn)
 		}
 		else if (strcmp(fromC, "help") == 0)
 		{
-			printf("PENIS\n");
 			// read and send help file to user
 			char fileCon[50][500];
 			FILE* file = fopen("helpFile.txt", "r");
