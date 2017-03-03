@@ -17,16 +17,21 @@ int client;
 std::vector<Client*> clients;
 
 int main()
-{
+{	
+	std::cout << "NFT STARTED" << std::endl;
+		
+	Log* log = new Log((char*) "NFT.log");
+	log->append("ran\n");
+	
 	// create socket
 	struct sockaddr_in sockDef;
-
+	
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	sockDef.sin_family = AF_INET;
 	sockDef.sin_port = htons(port);
 	sockDef.sin_addr.s_addr = INADDR_ANY;
-
+	
 	// bind socket
 	if (bind(sock, (struct sockaddr*)&sockDef, sizeof(sockDef)) < 0)
 	{

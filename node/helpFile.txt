@@ -12,4 +12,6 @@ NOTE: <IPC format> <- ip port cmd <- cmd being relative to the prefixing cmd ex.
 
 'restart' <- restart node
 
+'shutdown' <- shutdown node
+
 <EOF>

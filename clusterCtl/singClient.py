@@ -8,6 +8,7 @@ import sys
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((str(sys.argv[1]), 9800))
 
+# Wait for the output of a custon job running on a node
 def wait_for_job(jobName, ip_addr, port):
     jobSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     jobSock.bind((ip_addr, int(port))) 

@@ -42,10 +42,10 @@ int service(int conn)
 			char* ipcRaw = &fromC[6];	
 			struct IPC ipc = IPC_Parse(ipcRaw);
 			// NFT = Network file transpher
-			if (strncmp(ipc.cmd, "NFT", 3) == 0) 
+			if (strcmp(ipc.cmd, "NFT") == 0) 
 			{
 				printf("NFT STARTED ON PORT 9801\n");
-				create_job("./NFT", ipc.ip, atoi((const char*) ipc.port));
+				create_job("cd bin && ./NFT\0", ipc.ip, atoi((const char*) ipc.port));
 				sendSimpleMsg(conn, "NFT STARTED ON PORT 9801");
 			}
 			else 
@@ -87,6 +87,11 @@ int service(int conn)
 			sendSimpleMsg(conn, "restarting node");
 			return -1;
 		}
+		else if(strcmp(fromC, "shutdown") == 0) {
+			// shutdown node
+			sendSimpleMsg(conn, "shutting down node");
+			return 1;
+		}
 		// if client is sending ""'s its beacuse of a lost connecton 
 		else if (strcmp(fromC, "") == 0)
 		{
@@ -95,9 +100,10 @@ int service(int conn)
 		}
 		else if (strcmp(fromC, "help") == 0)
 		{
+			printf("PENIS\n");
 			// read and send help file to user
 			char fileCon[50][500];
-			FILE* file = fopen("../nodeManager/helpFile.txt", "r");
+			FILE* file = fopen("helpFile.txt", "r");
 			int fCIndex = 0;
 			do
 			{	

@@ -27,7 +27,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void create_job(char* cmd, char* ip_addr, int jRPort) {
+void create_job(char* cmd_p, char* ip_addr, int jRPort) {
+	// alcolate data for new process before fork	
+	char cmd[strlen(cmd_p) + 1];
+	strcpy(cmd, cmd_p);
 	pid_t pid = fork();
 	if (pid == 0)
 	{
