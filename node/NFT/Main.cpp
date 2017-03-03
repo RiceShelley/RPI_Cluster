@@ -18,10 +18,8 @@ std::vector<Client*> clients;
 
 int main()
 {	
-	std::cout << "NFT STARTED" << std::endl;
-		
 	Log* log = new Log((char*) "NFT.log");
-	log->append("ran\n");
+	log->append("NFT STARTED\n");
 	
 	// create socket
 	struct sockaddr_in sockDef;
@@ -35,9 +33,10 @@ int main()
 	// bind socket
 	if (bind(sock, (struct sockaddr*)&sockDef, sizeof(sockDef)) < 0)
 	{
-		std::cout << "NFT: failed to bind socket!\nNFT: exiting..." << std::endl;
+		log->append("NFT: failed to bind socket!\nNFT: exiting...\n");
 		return 0;
 	}
+    log->append("NFT SOCKET BOUND\n");
 
 	listen(sock, 1);
 
@@ -48,7 +47,7 @@ int main()
 	while (true)
 	{
 		client = accept(sock, (struct sockaddr*)&clientDef, &clientln);
-
+        log->append("Client connected\n");
 		// create client object
 		Client* c = new Client(client);
 		c->start();
@@ -58,6 +57,7 @@ int main()
 		{
 			if (clients.at(i)->getConnState() == false)
 			{
+                log->append("Client deleted from mem\n");
 				clients.erase(clients.begin() + i);
 			}
 		}
