@@ -18,7 +18,7 @@ class sockW:
         return self.sock
 
 # List of addr to connect to 
-"""addr = ['192.168.1.100',
+addr = ['192.168.1.100',
         '192.168.1.101', 
         '192.168.1.102', 
         '192.168.1.103', 
@@ -30,8 +30,8 @@ class sockW:
         '192.168.1.109', 
         '192.168.1.110', 
         '192.168.1.111']
-"""
-addr = ['192.168.1.100']
+
+#addr = ['192.168.1.100']
 
 # List of connHandle objects
 conn = []
@@ -39,7 +39,7 @@ conn = []
 # connect to all addr
 for i in addr:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(3)
+    sock.settimeout(1)
     try: 
         sock.connect((i, 9800))
         print(i + " + [OK]")
@@ -52,10 +52,15 @@ for i in addr:
 
 while (True):
     msg = input()
-    print(msg)
     if msg[:4] == "all ":
         for conn_H in conn:
             conn_H.step(msg[4:])
+    elif msg[:5] == "allH ":
+        for i in range(int(len(conn) / 2), len(conn)):
+            conn[i].step(msg[5:]) 
+    elif msg[:5] == "allL ":
+        for i in range(0, int(len(conn) / 2)):
+            conn[i].step(msg[5:])
     elif msg == "ls":
         print("\tCLIENT LIST\n<------------------------->\n")
         for conn_H in conn:

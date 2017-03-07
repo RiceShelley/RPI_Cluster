@@ -13,8 +13,8 @@ class Matrix {
 		char* getRim();
 		int getRows();
 		int getColums();
-		bool get_updatedMatrix();
-		void set_updatedMatrix(bool b);
+        void setRows(int rows);
+        void setColums(int colums);
 		void setMatrix(char** newGrid);
 		void setMatrix(char* str);
 		void setRim(char* rim);
@@ -23,6 +23,4 @@ class Matrix {
 		int colums;
 		char** grid;
 		char* matrixRim;
-		// Boolean for keeping matrix rims in serv mem updated
-		bool updatedMatrix;
 };

@@ -7,60 +7,99 @@
 #include <unistd.h>
 #include "Matrix.hpp"
 
-// Master matrix dimentions (master matrix is 2d array of matrix objects)
-#define mMatrixW 2
-#define mMatrixH 3
-#define mMatrixArea (mMatrixW * mMatrixH)
-// Dimentions of 2d char array matrix held in matrix object
-#define matrixW 15
-#define matrixH 8
-#define matrixArea (matrixW * matrixH)
+// Master matrix dimentions (master matrix is 2d array of matrix objects representing nodes)
+#define MASTER_MATRIX_W 4
+#define MASTER_MATRIX_H 3
+#define AMT_OF_NODES (MASTER_MATRIX_W * MASTER_MATRIX_H)
 
-// flag to signal that the node matrixes need to be resized
+// Dimentions of 2d char array matrix held on nodes
+int matrixW = 8;
+int matrixH = matrixW;
+int matrixArea = (matrixH * matrixW);
+
+// Flag to signal that the a nodes matrix need to be resized 
 bool resizeMatrix = false;
-// mutex for acessing shared mem
+
+// Mutex for acessing shared data in memory 
 pthread_mutex_t rMutex;
 
-// Allocate 2d char array 
-char** allocateMatrix(const int width, const int height)
+/* 
+*   Returns 2d character array givin a width and height 
+*   array is loaded onto the heap MUST BE MANUALLY DELETED
+*/
+char** allocateMatrix(const int rows, const int cols)
 { 
-	char** grid = new char*[width]; 
-	for (int i = 0; i < width; i++)
-	{
-		grid[i] = new char[height];
+	char** grid = new char*[rows]; 
+	for (int i = 0; i < rows; i++) {
+		grid[i] = new char[cols];
 	}
 	return grid;
 }
 
-// Create matrix object with 2d char array and its dimentions
+void deallocate_matrix(char **m, const int rows) 
+{ 
+    for(int i = 0; i < rows; i++) {
+        delete [] m[i];
+    }
+    printf("oh\n");
+    //delete [] m;
+    printf("my\n");
+    
+}
+
+// Send msg with end char !
+void send_node(int cID, char *buff, int len) 
+{
+    len += 2;
+    char s_buff[len];
+    memset(s_buff, '\0', len);
+    strncpy(s_buff, buff, (len - 2));
+    strcat(s_buff, "!");
+    send(cID, s_buff, len, 0);
+}
+
+// read until '!' or until "len" bytes are read
+void recv_node(int cID, char *buff, int len)
+{
+    memset(buff, '\0', len);
+    while (true) {
+        char tempBuff[len];
+        int b = recv(cID, tempBuff, len, 0);
+        // check for '!'
+        for (int i = 0; i <= b; i++) {
+            if (tempBuff[i] == '!') {
+                strncat(buff, tempBuff, i);
+                return;
+            }
+        }
+        strncat(buff, tempBuff, b);
+    }
+}
+
+/*
+*   Returns a matrix object givin a 2d chararacter array and its dimentions
+*   Matrix object is loaded onto the heap MUST BE MANUALLY DELETED!
+*/
 Matrix* constructMatrix(char** matrix, const int width, const int height)
 {
-	srand(time(NULL));
-	// Format 2d char array in such a way that the client code can process (aka draw * border)
+	// Format 2d char array in such a way that the client code can process (aka create a '*' border)
 	for (int col = 0; col < width; col++)
 	{
 		for (int row = 0; row < height; row++)
 		{
+            // If border index set eq to '*'
 			if (row == 0 || row == (height - 1) || col == 0 || col == (width - 1))
 			{
 				matrix[row][col] = '*';
 			}
 			else 
 			{
-				// generate noise <- remove me im just for testing
-				int num = rand() % 2;
-				if (num == 0) {
-					matrix[row][col] = ' ';
-				} else {
-					matrix[row][col] = ' ';
-				}
-				//usleep(1000 * 25);
+				matrix[row][col] = ' ';
 			}
 		}
 	}
-	usleep(1000 * 250);
 	// Create matrix object
-       	Matrix* matrixObj = new Matrix(width, height);	
+    Matrix* matrixObj = new Matrix(width, height);	
 	// Store 2d char array into new matrix object
 	matrixObj->setMatrix(matrix);
 	return matrixObj;
@@ -81,7 +120,7 @@ struct ClientData
 	int mMatrix_height;
 };
 
-// print a 2D char array
+// print a 2D char array from matrix object
 void printMatrix(Matrix** mMatrix, const int rows, const int cols)
 {
 	int subMatrixRow = 0;
@@ -104,40 +143,106 @@ void printMatrix(Matrix** mMatrix, const int rows, const int cols)
 	}
 }
 
-void syncNode(struct ClientData* clientData) {
-	// Buffer for handling socket output from node
-	const int nodeIn_ln = 1000 * 10;
-	char nodeIn[nodeIn_ln];
+// print a 2D char array 
+void print_2D_char_array(char** mMatrix, const int rows, const int cols)
+{
+	for (int row = 0; row < rows; row++)
+	{
+		for (int col = 0; col < cols; col++)
+		{
+		    printf("%c", mMatrix[row][col]);
+		}
+		printf("\n");	
+	}
+}
+
+// Sync the matrix in server's memory to the node
+void syncNode(struct ClientData* clientData) 
+{
+    // Get matrix object of this node
 	Matrix* matrix = &clientData->mMatrix[clientData->posRow_in_matrix][clientData->posCol_in_matrix];
 	// Send 2d char array matrix to node
 	std::string str_matrix = "DATASET:" + matrix->toString() + "\0";
-	send(clientData->clientID, str_matrix.c_str(), strlen(str_matrix.c_str()), 0); 
+	send_node(clientData->clientID, (char*) str_matrix.c_str(), strlen(str_matrix.c_str())); 
 	// Wait for node to respond with confimation that it recved its matrix
-	recv(clientData->clientID, nodeIn, (sizeof(nodeIn) / sizeof(char)), 0);
-	if (strcmp(nodeIn, "SYNC_DONE") != 0)
-	{
+    int len = strlen("SYNC_DONE!\0");
+    char nodeIn[len];
+	recv_node(clientData->clientID, nodeIn, len);
+    // On error exit
+	if (strcmp(nodeIn, "SYNC_DONE") != 0) {
 		printf("A catastrophic error has occured, all hope is lost.\nProc exiting...\n");
 		exit(-1);
 	}
 }
 
+// Gathers each node's matrix and puts them togeather into a 2D character array
+char** reconnstructMasterMatrix(struct ClientData* clusterNodeData) 
+{
+    // matrixH / matrixW - 2 beacuse node matrix borders will not be added into the completed matrix
+    int cMatrixH = (MASTER_MATRIX_H * (matrixH - 2));
+    int cMatrixW = (MASTER_MATRIX_W * (matrixW - 2));
+    char** cMatrix = allocateMatrix(cMatrixH, cMatrixW); 
+    for (int i = 0; i < AMT_OF_NODES; i++) {
+        char matrix_str[((matrixW * matrixH) + strlen("DATASET:\0")) + 1000];
+        send_node(clusterNodeData[i].clientID, (char *) "REQDATASET\0", strlen("REQDATASET\0"));
+        recv_node(clusterNodeData[i].clientID, matrix_str, (sizeof(matrix_str) / sizeof(char)));
+        if (strncmp(matrix_str, "DATASET:", 8) == 0) {
+            char* matrix_strP = &matrix_str[8];
+            // add one to skip the '*' border
+            int rowStart = (clusterNodeData[i].posRow_in_matrix * (matrixH - 2));
+            int colStart = (clusterNodeData[i].posCol_in_matrix * (matrixW - 2));
+            int i = matrixW;
+            for (int row = rowStart; row < (rowStart + matrixH) - 2; row++) {
+                for (int col = colStart; col < (colStart + matrixW) - 2; col++) {
+                    // omit border characters
+                    while (matrix_strP[i] == '*') 
+                        i++;
+                    cMatrix[row][col] = matrix_strP[i];
+                    i++;
+                }
+            }
+        } 
+        else 
+        {
+            printf("corrupt data? -> on reconnstruction of master matrix\n");
+        }
+    }
+    return cMatrix;
+}
+
+char** create_border(char** m, int h, int w) {
+    w += 2;
+    h += 2;
+    char** newMat = allocateMatrix(h, w);
+    for (int row = 0; row < h; row++) {
+        for (int col = 0; col < w; col++) {
+            if (row == 0 || row == (h - 1) || col == 0 || col == (w - 1)) {
+                newMat[row][col] = '*';    
+            } else {
+                newMat[row][col] = m[row - 1][col - 1];
+            }
+        }
+    }
+    return newMat;
+} 
+
 static void* syncNodeRim(void* p) {
 	struct ClientData* clientData = ((ClientData*) p);
-	// Buffer for handling socket output from node
-	const int nodeIn_ln = 1000 * 10;
-	char nodeIn[nodeIn_ln];
+    // Get nodes coresponding matrix object
 	Matrix* matrix = &clientData->mMatrix[clientData->posRow_in_matrix][clientData->posCol_in_matrix];
 	// Update matrix rim in serv mem
-	memset(nodeIn, '\0', nodeIn_ln);
-	send(clientData->clientID, "GETRIM\0", 7, 0);
-	recv(clientData->clientID, nodeIn, nodeIn_ln, 0);
+	send_node(clientData->clientID, (char *) "GETRIM", 6);
+    int len = strlen("MATRIXRIM!\0") + ((matrix->getRows() * 2) + (matrix->getColums() * 2));
+    char nodeIn[len];
+	recv_node(clientData->clientID, nodeIn, len);
 	if (strncmp(nodeIn, "MATRIXRIM", 9) != 0)
 	{
 		printf("this is bad very bad\n");
 		printf("data read '%s'\n", nodeIn);
-		syncNodeRim(clientData);
+        exit(-1);
 		pthread_exit(NULL);
 	}
+    // Set rim in server memory 
 	matrix->setRim(&nodeIn[9]);
 	pthread_exit(NULL);
 }
@@ -145,18 +250,18 @@ static void* syncNodeRim(void* p) {
 // Function for mataining node on seperate thread. param -> ClientData struct declared near the top of this file
 static void* stepNode(void *p)
 {
-	// Buffer for handling socket output from node
-	const int nodeIn_ln = 1000 * 10;
-	char nodeIn[nodeIn_ln];
 	// Convert void pointer back into struct
 	struct ClientData* clientData = ((ClientData*) p);
 	Matrix* matrix = &clientData->mMatrix[clientData->posRow_in_matrix][clientData->posCol_in_matrix];
+	// Buffer for handling socket output from node
+	const int nodeIn_ln = (matrix->getRows() * matrix->getColums());
+	char nodeIn[nodeIn_ln];
 	// Begin step
-	send(clientData->clientID, "STEP\0", 5, 0);
+	send_node(clientData->clientID, (char *) "STEP", 4);
 	do 
 	{
 		memset(nodeIn, '\0', nodeIn_ln);
-		recv(clientData->clientID, nodeIn, nodeIn_ln, 0);
+		recv_node(clientData->clientID, nodeIn, nodeIn_ln);
 		// Node will request rims of surounding matrixs so it can acuratly complet simulation 
 		if (strncmp(nodeIn, "GETRIMOF:", 9) == 0)
 		{
@@ -177,12 +282,11 @@ static void* stepNode(void *p)
 				// generate blank rim	
 				int len = ((matrix->getRows() * 2) + (matrix->getColums() * 2));
 				char rim[len];
-				for (int i = 0; i < len; i++)
-				{
+				for (int i = 0; i < len; i++) {
 					// ~ is used in this implementation of conways game of life to desinate undifined data 
 					rim[i] = '~';
 				}
-				send(clientData->clientID, rim, len, 0);
+				send_node(clientData->clientID, rim, len);
 			}
 			else 
 			{
@@ -190,13 +294,15 @@ static void* stepNode(void *p)
 				int len = ((matrix->getRows() * 2) + (matrix->getColums() * 2));
 				char rim[len];
 				strcpy(rim, clientData->mMatrix[posR][posC].getRim());
-				send(clientData->clientID, rim, len, 0);
+				send_node(clientData->clientID, rim, len);
 			}
-		} else if (strncmp(nodeIn, "RESIZE_REQ\0", 11) == 0) {
-			// resize of grid must be made	
-			printf("implement resize\n");
-		}
-	} while(strncmp(nodeIn, "STEP_DONE\0", 10) != 0);
+		} else if (strcmp(nodeIn, "RESIZE_REQ") == 0) {
+            // Set resize matrix flag to true
+            pthread_mutex_lock(&rMutex);
+	        resizeMatrix = true;	
+            pthread_mutex_unlock(&rMutex);
+        }
+	} while(strncmp(nodeIn, "STEP_DONE", 9) != 0);
 	pthread_exit(NULL);
 }
 
@@ -204,32 +310,35 @@ int main()
 {
 	// Keeps track of how many steps the nodes have taken
 	int globalStep = 0;
-	// array of client data structs
-	struct ClientData clusterClientData[mMatrixArea];
-	// Create 2d array of matrix objects
-	Matrix** masterMatrix = new Matrix*[mMatrixH];	
-	for (int row = 0; row < mMatrixH; row++)
+	// Array of node data structs
+	struct ClientData clusterClientData[AMT_OF_NODES];
+	// Create 2d array of matrix object pointers
+	Matrix** masterMatrix = new Matrix*[MASTER_MATRIX_H];	
+	for (int row = 0; row < MASTER_MATRIX_H; row++)
 	{
-		masterMatrix[row] = new Matrix[mMatrixW];
+		masterMatrix[row] = new Matrix[MASTER_MATRIX_W];
 	}
-	// Assign matrix object's their 2d char array
-	for (int row = 0; row < mMatrixH; row++)
+	// Assign and init matrix object
+	for (int row = 0; row < MASTER_MATRIX_H; row++)
 	{
-		for (int col = 0; col < mMatrixW; col++)
+		for (int col = 0; col < MASTER_MATRIX_W; col++)
 		{
-			char** matrix = allocateMatrix(matrixW, matrixH);
+            // Create the matrix objects matrix in mem 
+			char** matrix = allocateMatrix(matrixH, matrixW);
+            // Assine values to the matrix array
 			masterMatrix[row][col] = *constructMatrix(matrix, matrixW, matrixH);
+            // Print it so we can see it worked
 			masterMatrix[row][col].printMatrix();
 		}
 	}
-
-	// init mutex for acessing shared data
+	// init mutex for acessing shared data withen the threads
 	if (pthread_mutex_init(&rMutex, NULL) != 0) {
 		printf("failed to init rMutex\n");
 		return -1;
 	}
 
-	// Start tcp sock serv	
+	// Start tcp sock serv <- program will act as a beowolf cluster meaning this process will be the master
+    // and 'slave' computers will connect to this server and be used for processing 
 	struct sockaddr_in socket_def;
 
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -238,18 +347,21 @@ int main()
 	socket_def.sin_port = htons(9002);
 	socket_def.sin_addr.s_addr = INADDR_ANY;
 
+    // bind tcp socket
 	if (bind(sock, (struct sockaddr*) &socket_def, sizeof(socket_def)) < 0)
 	{
-		std::cout << "failed to bind socket" << std::endl;
+		printf("failed to bind socket.\n>.<\n");
 		exit(-1);
 	}
+    // set socket to listen for incoming connections
 	listen(sock, 1);
-	// Pos of matrix object in matrix object 2d array node will be assigned 
+
+	// Pos of matrix object in matrix object 2d array the node will be assigned 
 	int givinMatrixRow = 0;
 	int givinMatrixCol = 0;
 
-	char** grid = masterMatrix[0][0].getMatrix();
-	grid[2][1] = '#';
+    char** grid = masterMatrix[0][2].getMatrix();
+    // TODO read in start board from some output file 
 	grid[3][6] = '#';
 	grid[4][6] = '#';
 	grid[5][6] = '#';
@@ -266,7 +378,7 @@ int main()
 	grid[6][6] = '#';
 	grid[6][7] = '#';*/
 	
-	// Loop untill all nodes have connected
+	// Loop untill all 12 nodes have connected
 	while (true)
 	{
 		struct sockaddr_in client_addr;	
@@ -274,48 +386,53 @@ int main()
 		// Listen for client
 		int clientID = accept(sock, (struct sockaddr*) &client_addr, &sock_len);
 		printf("got connection\n");
-		// Create struct of data new thread needs
+        // Set nodes matrix dimensions
+        char dimen[30];
+        memset(dimen, '\0', (sizeof(dimen) / sizeof(char)));
+        sprintf(dimen, "SET_DIMEN:%d/%d", matrixH, matrixW);
+        send_node(clientID, dimen, strlen(dimen));
+		// Create struct of data that the node needs
 		struct ClientData clientData;
 		// Socket ID
 		clientData.clientID = clientID;
 		// Pointer to matrix segment
 		clientData.mMatrix = masterMatrix;
-		// Pos of matrix seg in master matrix
+		// Pos of matrix segment in master matrix
 		clientData.posCol_in_matrix = givinMatrixCol;
 		clientData.posRow_in_matrix = givinMatrixRow;
 		// Dimentions of master matrix
-		clientData.mMatrix_width = mMatrixW;
-		clientData.mMatrix_height = mMatrixH;
-		// node step
+		clientData.mMatrix_width = MASTER_MATRIX_W;
+		clientData.mMatrix_height = MASTER_MATRIX_H;
+		// Node step
 		if (givinMatrixRow < 1) {
-			clusterClientData[((givinMatrixRow * (mMatrixW - 1)) + givinMatrixCol)] = clientData;
+			clusterClientData[((givinMatrixRow * (MASTER_MATRIX_W - 1)) + givinMatrixCol)] = clientData;
 		} else {
-			clusterClientData[((givinMatrixRow * mMatrixW) + givinMatrixCol)] = clientData;
+			clusterClientData[((givinMatrixRow * MASTER_MATRIX_W) + givinMatrixCol)] = clientData;
 		}
-		if (givinMatrixRow == 2 && givinMatrixCol != 1) {
+
+		if (givinMatrixRow == 2 && givinMatrixCol != 3) {
 			givinMatrixRow = 0;
 			givinMatrixCol++;
 			continue;
 		}
-		if (givinMatrixRow == 2 && givinMatrixCol == 1)
+		if (givinMatrixRow == 2 && givinMatrixCol == 3)
 		{
 			break;
 		}
 		givinMatrixRow++;
 	}
-
-	for (int i = 0; i < sizeof(clusterClientData) / sizeof(struct ClientData); i++)
+	
+    for (int i = 0; i < AMT_OF_NODES; i++)
 	{
 		syncNode(&clusterClientData[i]);
 	}	
 
-	pthread_t threads[(sizeof(clusterClientData) / sizeof(struct ClientData))];
+	pthread_t threads[AMT_OF_NODES];
 	// Maintain timing of node steps 
 	while (true)
 	{
-		int amtOfNodes = (int) (sizeof(clusterClientData) / sizeof(struct ClientData));
 		// sync node rims
-		for (int i = 0; i < amtOfNodes; i++)
+		for (int i = 0; i < AMT_OF_NODES; i++)
 		{
 			int rtn = -1;
 			do {
@@ -326,12 +443,12 @@ int main()
 
 		}
 		// wait for all threads to finish
-		for (int i = 0; i < amtOfNodes; i++)
+		for (int i = 0; i < AMT_OF_NODES; i++)
 		{
 			pthread_join(threads[i], NULL);	
 		}
 		// step nodes
-		for (int i = 0; i < amtOfNodes; i++)
+		for (int i = 0; i < AMT_OF_NODES; i++)
 		{
 			int rtn = -1;
 			do {
@@ -340,14 +457,67 @@ int main()
 				}
 			} while (rtn != 0);
 		}
-		globalStep++;
 		// wait for all threads to finish
-		for (int i = 0; i < amtOfNodes; i++)
+		for (int i = 0; i < AMT_OF_NODES; i++)
 		{
 			pthread_join(threads[i], NULL);	
 		}
-		usleep(1000 * 100);
-		if ((globalStep % 100) == 0) {
+        globalStep++;
+        if (resizeMatrix) {
+            // On resize consolidate sim to node 1,1 and continue sim with all other nodes blank
+            int mH = (MASTER_MATRIX_H * (matrixH - 2));
+            int mW = (MASTER_MATRIX_W * (matrixW - 2));
+            char **m_temp = reconnstructMasterMatrix(clusterClientData);
+            char **m = create_border(m_temp, mH, mW);
+            matrixW = mW + 2;
+            matrixH = mH + 2;
+            print_2D_char_array(m, matrixH, matrixW);
+            //deallocate_master_matrix(masterMatrix, (const int) MASTER_MATRIX_H);
+            for (int row = 0; row < MASTER_MATRIX_H; row++) {
+                for (int col = 0; col < MASTER_MATRIX_W; col++) {
+                    masterMatrix[row][col].printMatrix();
+                    if (row == 1 && col == 1) {
+                        // Create matrix object
+                        //Matrix* matrixObj = new Matrix(matrixW, matrixH);	
+	                    // Store 2d char array into new matrix object
+	                    //matrixObj->setMatrix(m);
+                        deallocate_matrix(masterMatrix[row][col].getMatrix(), masterMatrix[row][col].getRows());
+                        masterMatrix[row][col].setRows(matrixH);
+                        masterMatrix[row][col].setColums(matrixW);
+                        masterMatrix[row][col].setMatrix(m);
+                        
+                    } else {
+                        char** tmp_matrix = allocateMatrix((const int) (matrixH - 2), (const int) (matrixW - 2));
+                        for (int r = 0; r < (matrixH - 2); r++) {
+                            for (int c = 0; c < (matrixW - 2); c++) {
+                                tmp_matrix[r][c] = ' ';
+                            }
+                        }
+                        char** matrix = create_border(tmp_matrix, matrixH - 2, matrixW - 2); 
+                        char** oldM = masterMatrix[row][col].getMatrix();
+                        print_2D_char_array(matrix, matrixH, matrixW);
+                        deallocate_matrix(oldM, masterMatrix[row][col].getRows());
+                        masterMatrix[row][col].setRows(matrixH);
+                        masterMatrix[row][col].setColums(matrixW);
+                        masterMatrix[row][col].setMatrix(matrix);
+                    }
+                    printf("%d/%d\n", row, col);
+                    
+                    masterMatrix[row][col].printMatrix();
+                }
+            } 
+            char dimen[30];
+            memset(dimen, '\0', (sizeof(dimen) / sizeof(char)));
+            sprintf(dimen, "SET_DIMEN:%d/%d", matrixH, matrixW);
+            for (int i = 0; i < AMT_OF_NODES; i++) {
+                send_node(clusterClientData[i].clientID, dimen, strlen(dimen));
+                syncNode(&clusterClientData[i]);
+            }
+            matrixArea = (matrixH * matrixW);
+            resizeMatrix = false;
+        }
+        usleep(1000 * 100);
+        if (globalStep == -20) {
 			if ((globalStep % 100000) == 0)
 			{
 				printf("globalStep = %i\n", globalStep);
@@ -361,5 +531,17 @@ int main()
 			grid[4][4] = '#';
 			syncNode(&clusterClientData[0]);
 		}
+        // gather all node data and compile into one big array
+        if ((globalStep % 10) == 0) {
+            int mH = (MASTER_MATRIX_H * (matrixH - 2));
+            int mW = (MASTER_MATRIX_W * (matrixW - 2));
+            char **m_temp = reconnstructMasterMatrix(clusterClientData);
+            char **m = create_border(m_temp, mH, mW);
+            system("clear");
+            print_2D_char_array(m, mH + 2, mW + 2); 
+        }
+
 	}
+    pthread_mutex_destroy(&rMutex);
+    return 0;
 }

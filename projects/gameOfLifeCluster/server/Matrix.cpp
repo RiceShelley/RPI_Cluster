@@ -4,7 +4,6 @@ Matrix::Matrix(int width, int hieght) : rows(hieght), colums(width)
 {
 	std::cout << "Matrix created" << std::endl;
 	matrixRim = new char[(rows * 2) + (colums * 2)];
-	updatedMatrix = false;
 }
 
 Matrix::Matrix() 
@@ -80,12 +79,13 @@ int Matrix::getColums()
 	return colums;
 }
 
-bool Matrix::get_updatedMatrix()
+void Matrix::setRows(int rows)
 {
-	return updatedMatrix;
+    Matrix::rows = rows;
 }
 
-void Matrix::set_updatedMatrix(bool b)
+void Matrix::setColums(int colums)
 {
-	updatedMatrix = b;
+    Matrix::colums = colums;
 }
+

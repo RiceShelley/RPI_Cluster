@@ -24,17 +24,14 @@
 #include <resolv.h>
 #include <errno.h>
 
-// Starting dimentions of 2d char array
-#define GRID_WIDTH 15
-#define GRID_HEIGHT 8
+// Board dimentions <- set by server 
+int gridW = 5;
+int gridH = 5;
+int gridA = 25;
 
 // 2d array of chars for holding game of life board
-char grid[GRID_HEIGHT][GRID_WIDTH]; 
-char tempGrid[GRID_HEIGHT][GRID_WIDTH];
-
-// Board dimentions as int
-int gridW = GRID_WIDTH;
-int gridH = GRID_HEIGHT;
+char** grid;
+char** tempGrid;
 
 // flag requesting server matrix resize
 bool resizeReq = false;
@@ -55,31 +52,79 @@ void writeMatrix(char* newMatrix)
 	}	
 }
 
+/* 
+*   Returns 2d character array givin a width and height 
+*   array is loaded onto the heap MUST BE MANUALLY DELETED
+*/
+char** allocateMatrix(int width, int height)
+{ 
+	char** grid = calloc((height + 1), sizeof(char*)); 
+	for (int i = 0; i < (height + 1); i++) {
+		grid[i] = calloc((width + 1), sizeof(char));
+	}
+	return grid;
+}
+
+void deallocateMatrix(char** matrix, int height) {
+    for (int i = 0; i < (height + 1); i++) {
+        free(matrix[i]);
+    }
+    free(matrix);
+}
+
+void send_server(int cID, char *buff, int len) 
+{
+    len += 2;
+    char s_buff[len];
+    memset(s_buff, '\0', len);
+    strcpy(s_buff, buff);
+    strcat(s_buff, "!");
+    send(cID, s_buff, len, 0);
+}
+
+// read until '!' or until "len" bytes are read
+void recv_server(int cID, char *buff, int len)
+{
+    memset(buff, '\0', len);
+    while (true) {
+        char tempBuff[len];
+        int b = recv(cID, tempBuff, len, 0);
+        // check for '!'
+        for (int i = 0; i < b; i++) {
+            if (tempBuff[i] == '!') {
+                strncat(buff, tempBuff, i);
+                return;
+            }
+        }
+        strncat(buff, tempBuff, b);
+    }
+}
+
 char* getMatrixRim()
 {
-	char* rim = (char* ) malloc(((GRID_WIDTH * 2) + (GRID_HEIGHT * 2) + 1));
+	char* rim = (char* ) malloc(((gridW * 2) + (gridH * 2) + 1));
 	int i = 0;
 	int col = 0;
 	int row = 1;
 	// assign top then bottom rows followed by left then right
 	for (int n = 0; n < 2; n++)
 	{
-		for (col = 0; col < GRID_WIDTH; col++)
+		for (col = 0; col < gridW; col++)
 		{
 			rim[i] = grid[row][col];
 			i++;
 		}
-		row = (GRID_HEIGHT - 2);
+		row = (gridH - 2);
 	}
 	col = 1;
 	for (int n = 0; n < 2; n++)
 	{
-		for (row = 0; row < GRID_HEIGHT; row++)
+		for (row = 0; row < gridH; row++)
 		{
 			rim[i] = grid[row][col];
 			i++;
 		}
-		col = (GRID_WIDTH - 2);
+		col = (gridW - 2);
 	}
 	rim[i] = '\0';
 	return rim;
@@ -99,22 +144,7 @@ void clearGrid()
 	}
 }
 
-void printGrid() 
-{
-	//system("clear");
-	for (int row = 0; row < gridH; row++)
-	{
-		for (int col = 0; col < gridW; col++)
-		{
-			if (row == 0 || row == (gridH - 1) || col == 0 || col == (gridW -1)) 
-				grid[row][col] = '*';
-			printf("%c", grid[row][col]);
-		}
-		printf("\n");
-	}
-}
-
-void print2dArray(char grid[gridH][gridW], int rows, int cols) 
+void print2dArray(char **grid, int rows, int cols) 
 {
 	for (int row = 0; row < rows; row++)
 	{
@@ -126,14 +156,14 @@ void print2dArray(char grid[gridH][gridW], int rows, int cols)
 	}
 }
 
-int testCell(int row, int col, char tempGrid[GRID_HEIGHT][GRID_WIDTH])
+int testCell(int row, int col, char **tempGrid)
 {
 	// do neighbour count
 	if (tempGrid[row][col] == '#') {
-		if ((col == 2 && (row > 1 && row < GRID_HEIGHT - 2)) || 
-		(col == GRID_WIDTH - 3 && (row > 1 && row < GRID_HEIGHT)) ||
-		(row == 2 && (col > 1 && col < GRID_WIDTH - 2)) || 
-		(row == GRID_HEIGHT - 3 && (col > 1 && col < GRID_WIDTH - 2))) {
+		if ((col == 2 && (row > 1 && row < gridH - 2)) || 
+		(col == gridW - 3 && (row > 1 && row < gridH)) ||
+		(row == 2 && (col > 1 && col < gridW - 2)) || 
+		(row == gridH - 3 && (col > 1 && col < gridW - 2))) {
 			/* 
 			* do check for undefined data character
 			* undefined data could effect the sim if a life cell nears it 
@@ -167,7 +197,6 @@ int testCell(int row, int col, char tempGrid[GRID_HEIGHT][GRID_WIDTH])
 			}
 		}
 	}
-
 	int neighbours = 0;
 	if (tempGrid[row + 1][col - 1] == '#') 
 		neighbours++;
@@ -190,18 +219,7 @@ int testCell(int row, int col, char tempGrid[GRID_HEIGHT][GRID_WIDTH])
 
 void step()
 {
-	// flags for identifing if certain parts of other matrixes are required for this matrixs computation
-	// edges
-	bool hasRight = true;
-	bool hasLeft = true;
-	bool hasTop = true;
-	bool hasBot = true;
-	// corners
-	bool hasTopLeft = true;
-	bool hasTopRight = true;
-	bool hasBotLeft = true;
-	bool hasBotRight = true;
-
+    printf("inside step\n");
 	// init temp grid to equal current grid
 	char rimN1_Z[(gridW * 2) + (gridH * 2)];
 	char rim1_Z[(gridW * 2) + (gridH * 2)];
@@ -218,117 +236,87 @@ void step()
 		for (int col = 0; col < gridW; col++)
 		{
 			tempGrid[row][col] = grid[row][col];
-			/* check if grid is going to need data from other rims toDo make this work
-			if (tempGrid[row][col] == '#') {
-				if (row == 1 && col == 1) {
-					hasTopLeft = true;
-				} else if (row == 1 && col == gridW - 2) {
-					hasTopRight = true;
-				} else if (row == gridH - 2 && col == 1) {
-					hasBotLeft = true;
-				} else if (row == gridH - 2 && col == gridW - 2){
-					hasBotRight = true;
-				} else if (row == 1) {
-					hasTop = true;
-				} else if (row == gridH - 2) {
-					hasBot = true;	
-				} else if (col == 1) {
-					hasLeft = true;
-				} else if (col == gridW -1) {
-					hasRight = true;
-				}
-			}*/
 		}
-	}
-	if (hasTop) {
-		// get rim of matrix above this one
-		send(sockfd, "GETRIMOF:-1/0\0", (sizeof("GETRIMOF:-1/0\0") / sizeof(char)), 0);
-		memset(rimN1_Z, 0, (sizeof(rimN1_Z) / sizeof(char)));
-		recv(sockfd, rimN1_Z, (sizeof(rimN1_Z) / sizeof(char)), 0);
-		char bottomRow[gridW];
-		memset(bottomRow, 0, gridW);
-		strcpy(rimN1_Z, (const char*) &rimN1_Z[gridW]);
-		strncpy(bottomRow, rimN1_Z, gridW);
-		for (int i = 0; i < gridW; i++)
-		{
-			grid[0][i] = bottomRow[i];
-		}
-	}
-	if (hasBot) {
-		// get rim of matrix bellow this one
-		send(sockfd, "GETRIMOF:1/0\0", (sizeof("GETRIMOF:1/0\0") / sizeof(char)), 0);
-		memset(rim1_Z, 0, (sizeof(rim1_Z) / sizeof(char)));
-		recv(sockfd, rim1_Z, (sizeof(rim1_Z) / sizeof(char)), 0);
-		char topRow[gridW];
-		memset(topRow, 0, gridW);
-		strncpy(topRow, rim1_Z, gridW);
-		for (int i = 0; i < gridW; i++)
-		{
-			grid[gridH - 1][i] = topRow[i];
-		}
-	}
-	if (hasLeft) {
-		// get rim of matrix to the left of this one
-		send(sockfd, "GETRIMOF:0/-1\0", (sizeof("GETRIMOF:0/-1\0") / sizeof(char)), 0);
-		memset(rimZ_N1, 0, (sizeof(rimZ_N1) / sizeof(char)));
-		recv(sockfd, rimZ_N1, (sizeof(rimZ_N1) / sizeof(char)), 0);
-		char rightRow[gridH];
-		memset(rightRow, 0, gridH);
-		strcpy(rimZ_N1, (const char*) &rimZ_N1[((gridW * 2) + gridH)]);
-		strcpy(rightRow, rimZ_N1);
-		for (int i = 0; i < gridH; i++)
-		{
-			grid[i][0] = rightRow[i];
-		}
-	}
-	if (hasRight) {
-		// get rim of matrix to the right of this one
-		send(sockfd, "GETRIMOF:0/1\0", (sizeof("GETRIMOF:0/1\0") / sizeof(char)), 0);
-		memset(rimZ_1, 0, (sizeof(rimZ_1) / sizeof(char)));
-		recv(sockfd, rimZ_1, (sizeof(rimZ_1) / sizeof(char)), 0);
-		char leftRow[gridH];
-		memset(leftRow, 0, gridH);
-		strncpy(leftRow, (const char*) &rimZ_1[(gridW * 2)], gridH);
-		for (int i = 0; i < gridH; i++) 
-		{
-			grid[i][gridW - 1] = leftRow[i];
-		} 
-	}
+    }
+    // get rim of matrix above this one
+    send_server(sockfd, "GETRIMOF:-1/0", (sizeof("GETRIMOF:-1/0") / sizeof(char)));
+    memset(rimN1_Z, 0, (sizeof(rimN1_Z) / sizeof(char)));
+    recv_server(sockfd, rimN1_Z, (sizeof(rimN1_Z) / sizeof(char)));
+    char bottomRow[gridW];
+    memset(bottomRow, 0, gridW);
+    strcpy(rimN1_Z, (const char*) &rimN1_Z[gridW]);
+    strncpy(bottomRow, rimN1_Z, gridW);
+    for (int i = 0; i < gridW; i++)
+    {
+        grid[0][i] = bottomRow[i];
+    }
+    // get rim of matrix bellow this one
+    send_server(sockfd, "GETRIMOF:1/0", (sizeof("GETRIMOF:1/0") / sizeof(char)));
+    memset(rim1_Z, 0, (sizeof(rim1_Z) / sizeof(char)));
+    recv_server(sockfd, rim1_Z, (sizeof(rim1_Z) / sizeof(char)));
+    char topRow[gridW];
+    memset(topRow, 0, gridW);
+    strncpy(topRow, rim1_Z, gridW);
+    for (int i = 0; i < gridW; i++)
+    {
+        grid[gridH - 1][i] = topRow[i];
+    }
+    // get rim of matrix to the left of this one
+    send_server(sockfd, "GETRIMOF:0/-1", (sizeof("GETRIMOF:0/-1") / sizeof(char)));
+    memset(rimZ_N1, 0, (sizeof(rimZ_N1) / sizeof(char)));
+    recv_server(sockfd, rimZ_N1, (sizeof(rimZ_N1) / sizeof(char)));
+    char rightRow[gridH];
+    memset(rightRow, 0, gridH);
+    strcpy(rimZ_N1, (const char*) &rimZ_N1[((gridW * 2) + gridH)]);
+    strcpy(rightRow, rimZ_N1);
+    for (int i = 0; i < gridH; i++)
+    {
+        grid[i][0] = rightRow[i];
+    }
+	// get rim of matrix to the right of this one
+    send_server(sockfd, "GETRIMOF:0/1", (sizeof("GETRIMOF:0/1") / sizeof(char)));
+    memset(rimZ_1, 0, (sizeof(rimZ_1) / sizeof(char)));
+    recv_server(sockfd, rimZ_1, (sizeof(rimZ_1) / sizeof(char)));
+    char leftRow[gridH];
+    memset(leftRow, 0, gridH);
+    strncpy(leftRow, (const char*) &rimZ_1[(gridW * 2)], gridH);
+    for (int i = 0; i < gridH; i++) 
+    {
+        grid[i][gridW - 1] = leftRow[i];
+    } 
 	// Add edges of surrounding matrices to this one if need be
-	if (hasTopLeft) {
-		// get rim of matrix above and the the left
-		send(sockfd, "GETRIMOF:-1/-1\0", (sizeof("GETRIMOF:-1/-1\0") / sizeof(char)), 0);
-		memset(rimN1_N1, 0, (sizeof(rimN1_N1) / sizeof(char)));
-		recv(sockfd, rimN1_N1, (sizeof(rimN1_N1) / sizeof(char)), 0);
-		// top left corner
-		grid[0][0] = rimN1_N1[28];
-	}
-	if (hasTopRight) {
-		// get rim of matrix above and to the right
-		send(sockfd, "GETRIMOF:-1/1\0", (sizeof("GETRIMOF:-1/1\0") / sizeof(char)), 0);
-		memset(rimN1_1, 0, (sizeof(rimN1_1) / sizeof(char)));
-		recv(sockfd, rimN1_1, (sizeof(rimN1_1) / sizeof(char)), 0);
-		// top right corner
-		grid[0][gridW - 1] = rimN1_1[16];
-	}
-	if (hasBotRight) {
-		// get rim of matrix bellow and to the right
-		send(sockfd, "GETRIMOF:1/1\0", (sizeof("GETRIMOF:1/1\0") / sizeof(char)), 0);
-		memset(rim1_1, 0, (sizeof(rim1_1) / sizeof(char)));
-		recv(sockfd, rim1_1, (sizeof(rim1_1) / sizeof(char)), 0);
-		// bot right corner
-		grid[gridH - 1][gridW - 1] = rim1_1[1];
-	}
-	if (hasBotLeft) {
-		// get rim of matrix bellow and to the left
-		send(sockfd, "GETRIMOF:1/-1\0", (sizeof("GETRIMOF:1/-1\0") / sizeof(char)), 1);
-		memset(rim1_N1, 0, (sizeof(rim1_N1) / sizeof(char)));
-		recv(sockfd, rim1_N1, (sizeof(rim1_N1) / sizeof(char)), 0);
-		// bot left corner
-		grid[gridH - 1][0] = rim1_N1[13];
-	}	
 
-	print2dArray(grid, gridH, gridW);
+    // get rim of matrix above and the the left
+    send_server(sockfd, "GETRIMOF:-1/-1", (sizeof("GETRIMOF:-1/-1") / sizeof(char)));
+    memset(rimN1_N1, 0, (sizeof(rimN1_N1) / sizeof(char)));
+    recv_server(sockfd, rimN1_N1, (sizeof(rimN1_N1) / sizeof(char)));
+    // top left corner
+    grid[0][0] = rimN1_N1[(gridW * 2) - 2];
+
+    // get rim of matrix above and to the right
+    send_server(sockfd, "GETRIMOF:-1/1", (sizeof("GETRIMOF:-1/1") / sizeof(char)));
+    memset(rimN1_1, 0, (sizeof(rimN1_1) / sizeof(char)));
+    recv_server(sockfd, rimN1_1, (sizeof(rimN1_1) / sizeof(char)));
+    // top right corner
+    grid[0][gridW - 1] = rimN1_1[gridW + 1];
+
+    // get rim of matrix bellow and to the right
+    send_server(sockfd, "GETRIMOF:1/1", (sizeof("GETRIMOF:1/1") / sizeof(char)));
+    memset(rim1_1, 0, (sizeof(rim1_1) / sizeof(char)));
+    recv_server(sockfd, rim1_1, (sizeof(rim1_1) / sizeof(char)));
+    // bot right corner
+    grid[gridH - 1][gridW - 1] = rim1_1[1];
+
+	// get rim of matrix bellow and to the left
+    send_server(sockfd, "GETRIMOF:1/-1", (sizeof("GETRIMOF:1/-1") / sizeof(char)));
+    memset(rim1_N1, 0, (sizeof(rim1_N1) / sizeof(char)));
+    recv_server(sockfd, rim1_N1, (sizeof(rim1_N1) / sizeof(char)));
+    // bot left corner
+    grid[gridH - 1][0] = rim1_N1[gridW - 2];
+    
+    printf("welp\n");
+
+	//print2dArray(grid, gridH, gridW);
 
 	// nt3dA logic to grid
 	for (int row = 1; row < gridH - 1; row++)
@@ -349,6 +337,7 @@ void step()
 			}
 		}
 	}
+
 	// set grid to contents of tempGrid
 	for (int row = 0; row < gridH; row++)
 	{
@@ -359,9 +348,10 @@ void step()
 	}
 	if (resizeReq) {
 		printf("RESIZE DEAR GOD!\n");
-		send(sockfd, "RESIZE_REQ\0", 11, 0);
+		send_server(sockfd, "RESIZE_REQ\0", 11);
+        resizeReq = false;
 	}
-	send(sockfd, "STEP_DONE\0", 10, 0);	
+	send_server(sockfd, "STEP_DONE\0", 10);	
 }
 
 void procControl()
@@ -373,22 +363,21 @@ void procControl()
 
 	serv_def.sin_family = AF_INET;
 	serv_def.sin_port = htons(portNum);
-	inet_aton((const char*) "192.168.1.128", &serv_def.sin_addr.s_addr);
+	inet_aton((const char*) "192.168.1.174", &serv_def.sin_addr.s_addr);
 	// connect to server
 	connect(sockfd, (struct sockaddr*)&serv_def, sizeof(serv_def));
-	char fromS[1000 * 10];
-	int fromSLn = (sizeof(fromS) / sizeof(char));
-	memset(fromS, 0, fromSLn);
+    int buff_pad = 100;
 	while(true) 
 	{
-		
-		memset(fromS, '\0', fromSLn);
-		recv(sockfd, fromS, fromSLn, 0);
+        
+        int fromS_ln = gridA + buff_pad;
+	    char fromS[fromS_ln];
+		recv_server(sockfd, fromS, fromS_ln);
+        printf("from server -> %s\n", fromS);
 		// Server requested node to run next step of the simulation
 		if (strncmp(fromS, "STEP", 4) == 0)
 		{
 			step();
-			//printGrid();
 		}
 		// Server has sent node a new matrix
 		else if (strncmp(fromS, "DATASET:", 8) == 0)
@@ -396,11 +385,28 @@ void procControl()
 			char* dataSet = &fromS[8];
 			// Parse data set
 			writeMatrix(dataSet);
-			send(sockfd, "SYNC_DONE\0", 10, 0);
-			if (resizeReq) {
-				resizeReq = false;
-			}
+			send_server(sockfd, "SYNC_DONE\0", 10);
 		}
+        // Server is resizing matrix
+        else if (strncmp(fromS, "SET_DIMEN:", 10) == 0) {
+            // Free mem from old grids 
+            deallocateMatrix(grid, gridH);
+            deallocateMatrix(tempGrid, gridH);
+			// Parse dimentions of grid
+            char* dimen = &fromS[10]; 
+			char cY[5];
+			memset(cY, 0, 5);
+			strncpy(cY, (const char*)dimen, (strlen(dimen) - strlen(strchr(dimen, '/'))));
+			char* cX = &strchr(dimen, '/')[1];
+			gridH = atoi(cY);
+			gridW = atoi(cX);
+            gridA = (gridH * gridW);
+            printf("new dimen h = %d, w = %d", gridH, gridW);
+            // Create new grids with new dimensions
+            grid = allocateMatrix(gridW, gridH);
+            tempGrid = allocateMatrix(gridW, gridH);
+            clearGrid();
+        }
 		/*
 		 * server has reqested the matrix this node has
 		 * been processing!!!
@@ -421,7 +427,9 @@ void procControl()
 				}
 			}
 			matrix_str[i] = '\0';
-			send(sockfd, matrix_str, strlen(matrix_str), 0);
+            printf("%s\n", matrix_str);
+            send_server(sockfd, matrix_str, strlen(matrix_str));
+			//send(sockfd, matrix_str, strlen(matrix_str), 0);
 		}
 		/* 
 		 * server has requested the rim of this matrix
@@ -435,7 +443,8 @@ void procControl()
 			char* rimFormat = (char*) malloc(((int) strlen(rim)) + ((int) strlen("MATRIXRIM\0")) + 1);
 			strcpy(rimFormat, ((const char*) "MATRIXRIM"));
 			strcat(rimFormat, ((const char*) rim));
-			send(sockfd, rimFormat, strlen(rimFormat), 0);
+            printf("%s\n", rimFormat);
+			send_server(sockfd, rimFormat, strlen(rimFormat));
 			free(rimFormat);
 			free(rim);
 		}
@@ -449,6 +458,8 @@ void procControl()
 
 int main() 
 {
+    grid = allocateMatrix(gridW, gridH);
+    tempGrid = allocateMatrix(gridW, gridH);
 	// Init grid by clearing
 	clearGrid();	
 	// Start process loop

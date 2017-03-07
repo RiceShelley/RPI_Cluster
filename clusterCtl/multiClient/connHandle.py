@@ -1,5 +1,6 @@
 import socket
 import _thread as thread
+import time
 
 # class for handling node connections 
 class connHandle:
@@ -92,6 +93,14 @@ class connHandle:
         self.sock.send(("kill " + cmd).encode())
         print(self.sock.recv(100).decode())
 
+    def updateGOL(self):
+        self.do_job("do job 192.168.1.174:7343 cd userBin/storage && rm -r gameOfLifeCluster")
+        time.sleep(5)
+        self.do_job("do job 192.168.1.174:2832 cd userBin/storage && git clone https://github.com/rootieDev/gameOfLifeCluster.git")
+        time.sleep(15)
+        self.do_job("do job 192.168.1.174:8544 cd userBin/storage/gameOfLifeCluster && gcc Main.c")
+    
+
     def step(self, input):
         # Run custom cmd on node ex. "do job echo Hello, World!"
         if input[:7] == "do job ":
@@ -116,4 +125,9 @@ class connHandle:
                 print(self.sock_wrapper.get_ip_addr() + " <RES> " + self.sock.recv(100).decode())
             except:
                 print(self.sock_wrapper.get_ip_addr() + " [UN RES] -- NO RES")
-            
+        # Shutdown node
+        elif input == "shutdown":
+            self.sock.send("shutdown".encode())
+        # update game of life software
+        elif input == "update GOL":
+            thread.start_new_thread(self.updateGOL, ())
