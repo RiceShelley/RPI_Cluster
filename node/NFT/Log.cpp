@@ -1,11 +1,12 @@
 #include "Log.h"
 
-Log::Log(char* name)	
+Log::Log(char *name)
 {
 	logName = name;
-	std::cout << "NFT: log created! at " << name << std::endl;
+	std::cout << "log created! at " << name << std::endl;
 }
 
-void Log::append(std::string data) {
+void Log::append(std::string data)
+{
 	file.appendFile(logName, data);
 }

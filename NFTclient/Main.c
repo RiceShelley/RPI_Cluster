@@ -3,8 +3,7 @@
  *
  *       Filename:  Main.c
  *
- *    Description:  game of life 
- *
+ *    Description:  game of life *
  *        Version:  1.0
  *        Created:  08/07/2016 03:10:27 AM
  *       Revision:  none
@@ -318,7 +317,7 @@ void proc_contol()
 
 	serv_def.sin_family = AF_INET;
 	serv_def.sin_port = htons(portNum);
-	inet_aton((const char *) "192.168.1.174", &serv_def.sin_addr.s_addr);
+	inet_aton((const char *) "192.168.1.10", &serv_def.sin_addr.s_addr);
 	
 	connect(sock_fd, (struct sockaddr *) &serv_def, sizeof(serv_def));
 	

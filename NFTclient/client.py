@@ -52,7 +52,7 @@ def sendFile(fileName):
         loadingBar = '#' * int((bytesRead / size) * 100) + '-' * (100 - int((bytesRead / size) * 100))
         print("progress[" + loadingBar + "]", end='\r')
         sock.send(binD)
-        time.sleep(.05)
+        time.sleep(.25)
     time.sleep(1)
     print("progress[" + loadingBar + "]")
     sock.send("<EOF>".encode())

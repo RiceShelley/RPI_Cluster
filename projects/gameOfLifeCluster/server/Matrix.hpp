@@ -2,25 +2,25 @@
 #include <stdio.h>
 #include <string.h>
 #include <vector>
-class Matrix {
 
+class Matrix {
 	public:
 		Matrix(int width, int height);
 		Matrix();
-		void printMatrix();
-		std::string toString();
-		char** getMatrix();
-		char* getRim();
-		int getRows();
-		int getColums();
-        void setRows(int rows);
-        void setColums(int colums);
-		void setMatrix(char** newGrid);
-		void setMatrix(char* str);
-		void setRim(char* rim);
+		void print_matrix();
+		std::string to_string();
+		char **get_matrix();
+		char *get_rim();
+		int get_rows();
+		int get_colums();
+		void set_rows(int rows);
+		void set_colums(int colums);
+		void set_matrix(char **newGrid);
+		void set_matrix(char *str);
+		void set_rim(char *rim);
 	private:
 		int rows;
 		int colums;
-		char** grid;
-		char* matrixRim;
+		char **grid;
+		char *matrixRim;
 };
