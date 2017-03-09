@@ -34,9 +34,9 @@ class connHandle:
             WFJ_sock.bind((ip_addr, int(port)))
         except socket.error:
             print("ERROR ON [" + ip_addr + "] failed to bind sock on local client")
-            return
         connHandle.usedPorts.append(port)
         WFJ_sock.listen(5)
+        print("waiting for conn on " + ip_addr + " / " + str(port))
         conn, client_addr = WFJ_sock.accept()
         print(jobName + " [FINISHED] ON PORT [" + str(port) + "]" + " IP [" + self.sock_wrapper.get_ip_addr() + "]")
         conn.close()
